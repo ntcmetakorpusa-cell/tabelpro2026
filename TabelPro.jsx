@@ -5,7 +5,7 @@ import {
   Search, Plus, History, MessageSquare, Download, FileSpreadsheet,
   ChevronLeft, ChevronRight, X, Phone, Cake, Briefcase, Trash2,
   Pencil, Send, LogOut, Building2, Check, Clock, KeyRound, Lock,
-  ShieldCheck, RotateCcw, Eye, EyeOff, Sun, Moon, Plane, Menu
+  ShieldCheck, RotateCcw, Eye, EyeOff, Sun, Moon, Plane, Menu, StickyNote, Bell
 } from "lucide-react";
 
 /* ============================================================
@@ -147,6 +147,11 @@ export default function TabelPro() {
   const [editDept, setEditDept] = useState(null);
   const [navOpen, setNavOpen] = useState(false);
   const [birthdayAlert, setBirthdayAlert] = useState(null);
+  const [notes, setNotes] = useState([]);
+  const [reminders, setReminders] = useState([]);
+  const [showNotes, setShowNotes] = useState(false);
+  const [reminderAlert, setReminderAlert] = useState(null);
+  const chatSeenRef = useRef(null);
   const monthRef = useRef(null);
   const [addDeptOpen, setAddDeptOpen] = useState(false);
   const [newDeptName, setNewDeptName] = useState("");
@@ -158,6 +163,7 @@ export default function TabelPro() {
   const isHR = role === "hr";
   const isManager = role === "dept";
   const canSwitch = isAdmin || isHR;
+  const myKey = isAdmin ? "admin" : isHR ? "hr" : (session?.deptId || "");
 
   useEffect(() => { const t = setInterval(() => setClock(new Date()), 30000); return () => clearInterval(t); }, []);
 
@@ -205,6 +211,10 @@ export default function TabelPro() {
   const flash = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2200); };
   const scanBirthdays = async (depts) => { const t = new Date(); const out = []; for (const d of depts) { const emps = await loadKey("tp_emp_" + d.id, [], true); for (const e of emps) if (isBirthdayToday(e, t)) out.push({ name: e.name, dept: d.name, gender: e.gender || "", age: birthdayAge(e, t) }); } return out; };
   useEffect(() => { if (!booted || !session) return; (async () => { const t = new Date(); const todayStr = isoDay(t.getFullYear(), t.getMonth(), t.getDate()); const already = await loadKey("tp_bday_shown", "", false); if (already === todayStr) return; const list = await scanBirthdays(departments); await saveKey("tp_bday_shown", todayStr, false); if (list.length) setBirthdayAlert(list); })(); }, [booted, session]);
+  useEffect(() => { if (!session || !myKey) return; (async () => { setNotes(await loadKey("tp_notes_" + myKey, [], true)); setReminders(await loadKey("tp_rem_" + myKey, [], true)); })(); }, [session, myKey]);
+  useEffect(() => { if (!booted || !session || !myKey) return; (async () => { const r = await loadKey("tp_rem_" + myKey, [], true); const today = isoDay(now.getFullYear(), now.getMonth(), now.getDate()); const due = r.filter((x) => !x.done && x.date && x.date <= today); if (due.length) setReminderAlert(due); })(); }, [booted, session, myKey]);
+  useEffect(() => { if (!session) return; const id = setInterval(async () => { try { const fetched = await loadKey("tp_chat", [], true); setChat((prev) => { const idsF = new Set(fetched.map((m) => m.id)); const extra = prev.filter((m) => !idsF.has(m.id)); return [...fetched, ...extra].sort((a, b) => a.ts - b.ts); }); } catch (e) {} }, 5000); return () => clearInterval(id); }, [session]);
+  useEffect(() => { if (!session) return; const ids = new Set(chat.map((m) => m.id)); if (chatSeenRef.current === null) { chatSeenRef.current = ids; return; } const prev = chatSeenRef.current; const fresh = chat.filter((m) => !prev.has(m.id) && m.from !== myKey && (m.to === "all" || m.to === myKey || isAdmin)); chatSeenRef.current = ids; if (fresh.length && !showChat) { const m = fresh[fresh.length - 1]; flash((m.fromLabel || "Повідомлення") + ": " + (m.text.length > 40 ? m.text.slice(0, 40) + "…" : m.text)); } }, [chat]);
   useEffect(() => { if (monthRef.current) monthRef.current.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" }); }, [month]);
   const toggleTheme = async () => { const t = theme === "dark" ? "light" : "dark"; setTheme(t); await saveKey("tp_theme", t, false); };
 
@@ -276,13 +286,13 @@ export default function TabelPro() {
     await persistDepartments(list); if (deptId === id) setDeptId(list[0].id);
     const nu = { ...users }; delete nu[id]; await persistUsers(nu); pushLog(`Видалено відділ «${d?.name || ""}»`);
   };
-  const sendMessage = async (text) => {
-    const t = text.trim(); if (!t) return;
-    const ctxDeptId = isManager ? session.deptId : deptId;
-    const ctxName = departments.find((d) => d.id === ctxDeptId)?.name || "";
-    const msg = { id: uid(), deptId: ctxDeptId, deptName: ctxName, fromLabel: session.label, text: t, ts: Date.now() };
+  const sendMessage = async (text, toKey) => {
+    const t = text.trim(); if (!t || !toKey || toKey === "*") return;
+    const msg = { id: uid(), ts: Date.now(), text: t, from: myKey, fromLabel: session.label, to: toKey };
     const next = [...chat, msg]; setChat(next); await saveKey("tp_chat", next, true);
   };
+  const saveNotes = async (n) => { setNotes(n); await saveKey("tp_notes_" + myKey, n, true); };
+  const saveReminders = async (r) => { setReminders(r); await saveKey("tp_rem_" + myKey, r, true); };
   const setRolePin = async (key, pin) => { const next = { ...users, [key]: { pin: hashPin(pin) } }; await persistUsers(next); flash("PIN збережено"); };
   const clearRolePin = async (key) => { const next = { ...users }; delete next[key]; await persistUsers(next); flash("Доступ скинуто"); };
 
@@ -353,6 +363,7 @@ export default function TabelPro() {
         </nav>
         <div className="p-3 border-t s-bd space-y-1">
           {isAdmin && (<button onClick={() => setShowAccess(true)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-indigo-500 s-hover"><ShieldCheck size={16} /> Доступи та PIN</button>)}
+          <button onClick={() => setShowNotes(true)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm s-soft s-hover"><StickyNote size={16} /> Нотатки і нагадування</button>
           <button onClick={() => setShowReport(true)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm s-soft s-hover"><BarChart3 size={16} /> Звіт за місяць</button>
           <button onClick={exportExcel} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-emerald-600 s-hover"><FileSpreadsheet size={16} /> Експорт у Excel</button>
           {(isAdmin || isHR) && (<button onClick={() => setShowHistory(true)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm s-soft s-hover"><History size={16} /> Історія дій</button>)}
@@ -468,11 +479,13 @@ export default function TabelPro() {
       })()}
       {editDept && <DepartmentEditor dept={departments.find((x) => x.id === editDept.id) || editDept} employees={employees} onClose={() => setEditDept(null)} onRename={renameDept} onSetShift={setDeptShift} onApplyAll={applyShiftAll} onOpenProfile={(e) => setProfile(e)} onAddName={async (n) => { const nm = (n || "").trim(); if (!nm) return; const _dep = departments.find((x) => x.id === deptId); await persistEmployees([...employees, { id: uid(), name: nm, start: _dep?.start || "08:00", end: _dep?.end || "17:00", phone: "", birthday: "", position: "", leaves: [] }]); flash("Співробітника додано"); }} onDeleteEmp={(id) => removeEmployee(id)} />}
       {profile && <ProfileEditor emp={profile} onClose={() => setProfile(null)} onSave={saveProfile} onDelete={() => removeEmployee(profile.id)} />}
-      {showChat && <ChatPanel chat={chat} departments={departments} currentDeptId={isManager ? session.deptId : deptId} onSend={sendMessage} onClose={() => setShowChat(false)} />}
+      {showChat && <ChatPanel chat={chat} departments={departments} myKey={myKey} myLabel={session.label} isAdmin={isAdmin} onSend={sendMessage} onClose={() => setShowChat(false)} />}
       {showHistory && <HistoryModal log={log} onClose={() => setShowHistory(false)} />}
       {showReport && <ReportModal onClose={() => setShowReport(false)} deptName={deptName} month={MONTHS[month]} year={year} employees={employees} stats={stats} compute={computeEmp} onExport={exportExcel} />}
       {showAccess && <AccessPanel onClose={() => setShowAccess(false)} departments={departments} users={users} onSetPin={setRolePin} onClearPin={clearRolePin} />}
       {birthdayAlert && <BirthdayAlert list={birthdayAlert} onClose={() => setBirthdayAlert(null)} />}
+      {showNotes && <NotesModal notes={notes} reminders={reminders} onSaveNotes={saveNotes} onSaveReminders={saveReminders} onClose={() => setShowNotes(false)} />}
+      {reminderAlert && <ReminderAlert list={reminderAlert} onClose={() => setReminderAlert(null)} />}
 
       {toast && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm shadow-lg" style={{ background: "#0f172a", zIndex: 70 }}><Check size={16} className="text-emerald-400" /> {toast}</div>}
     </div>
@@ -700,21 +713,38 @@ function ProfileEditor({ emp, onClose, onSave, onDelete }) {
 }
 function Field({ label, icon, children }) { return (<label className="block"><span className="text-xs s-soft flex items-center gap-1.5">{icon}{label}</span>{children}</label>); }
 
-function ChatPanel({ chat, departments, currentDeptId, onSend, onClose }) {
-  const [text, setText] = useState(""); const [filter, setFilter] = useState("all"); const endRef = useRef(null);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chat, filter]);
-  const list = filter === "all" ? chat : chat.filter((m) => m.deptId === filter);
-  const send = () => { onSend(text); setText(""); };
+function ChatPanel({ chat, departments, myKey, myLabel, isAdmin, onSend, onClose }) {
+  const channels = [];
+  if (isAdmin) channels.push({ key: "*", label: "Уся історія" });
+  channels.push({ key: "all", label: "Загальний" });
+  for (const d of departments) channels.push({ key: d.id, label: d.name });
+  channels.push({ key: "hr", label: "Відділ кадрів" });
+  channels.push({ key: "admin", label: "Керуючий" });
+  const uniq = []; const seen = {};
+  for (const c of channels) { if (!seen[c.key] && c.key !== myKey) { seen[c.key] = 1; uniq.push(c); } }
+  const [ch, setCh] = useState(uniq[0] ? uniq[0].key : "all");
+  const [text, setText] = useState("");
+  const endRef = useRef(null);
+  const labelOf = (k) => k === "all" ? "Загальний" : k === "admin" ? "Керуючий" : k === "hr" ? "Відділ кадрів" : (departments.find((d) => d.id === k) ? departments.find((d) => d.id === k).name : k);
+  const visible = chat.filter((m) => {
+    if (ch === "*") return true;
+    if (ch === "all") return m.to === "all";
+    if (isAdmin) return m.from === ch || m.to === ch;
+    return (m.from === myKey && m.to === ch) || (m.from === ch && m.to === myKey);
+  });
+  useEffect(() => { if (endRef.current) endRef.current.scrollIntoView({ behavior: "smooth" }); }, [chat, ch]);
+  const canSend = ch !== "*";
+  const send = () => { if (canSend) { onSend(text, ch); setText(""); } };
   return (<div className="fixed inset-0 flex justify-end" style={{ zIndex: 60 }}><div className="absolute inset-0" style={{ background: "var(--overlay)" }} onClick={onClose} />
     <div className="relative h-full flex flex-col shadow-2xl s-panel" style={{ width: 420, maxWidth: "100%" }}>
       <div className="px-5 py-4 border-b s-bd flex items-center justify-between"><div className="flex items-center gap-2 font-semibold"><MessageSquare size={18} className="text-violet-500" /> Чат відділів</div><button onClick={onClose} className="p-1.5 rounded-lg s-hover s-muted"><X size={18} /></button></div>
-      <div className="px-4 py-2 border-b s-bd flex gap-1 overflow-x-auto"><button onClick={() => setFilter("all")} className={`px-3 py-1 rounded-full text-xs whitespace-nowrap ${filter === "all" ? "bg-violet-500 text-white" : "s-th s-soft"}`}>Усі</button>{departments.map((d) => <button key={d.id} onClick={() => setFilter(d.id)} className={`px-3 py-1 rounded-full text-xs whitespace-nowrap ${filter === d.id ? "bg-violet-500 text-white" : "s-th s-soft"}`}>{d.name}</button>)}</div>
+      <div className="px-4 py-2 border-b s-bd flex gap-1 overflow-x-auto">{uniq.map((c) => <button key={c.key} onClick={() => setCh(c.key)} className={`px-3 py-1 rounded-full text-xs whitespace-nowrap ${ch === c.key ? "bg-violet-500 text-white" : "s-th s-soft"}`}>{c.label}</button>)}</div>
       <div className="flex-1 overflow-y-auto p-4 space-y-3 s-th">
-        {list.length === 0 && <div className="text-center s-muted text-sm mt-10">Повідомлень ще немає.<br />Напишіть перше нижче.</div>}
-        {list.map((m) => { const mine = m.deptId === currentDeptId; return (<div key={m.id} className={`flex flex-col ${mine ? "items-end" : "items-start"}`}><div className="f11 s-muted mb-0.5 px-1">{m.fromLabel || m.deptName} · {new Date(m.ts).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</div><div className="px-3 py-2 rounded-2xl text-sm" style={{ maxWidth: "80%", background: mine ? "#7c3aed" : "var(--card)", color: mine ? "#fff" : "var(--text)", border: mine ? "none" : "1px solid var(--border)" }}>{m.text}</div></div>); })}
+        {visible.length === 0 && <div className="text-center s-muted text-sm mt-10">Повідомлень ще немає.<br />{canSend ? "Напишіть перше нижче." : ""}</div>}
+        {visible.map((m) => { const mine = m.from === myKey; const dir = isAdmin && m.to !== "all" ? " → " + labelOf(m.to) : ""; return (<div key={m.id} className={`flex flex-col ${mine ? "items-end" : "items-start"}`}><div className="f11 s-muted mb-0.5 px-1">{(m.fromLabel || labelOf(m.from)) + dir} · {new Date(m.ts).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</div><div className="px-3 py-2 rounded-2xl text-sm" style={{ maxWidth: "80%", background: mine ? "#7c3aed" : "var(--card)", color: mine ? "#fff" : "var(--text)", border: mine ? "none" : "1px solid var(--border)" }}>{m.text}</div></div>); })}
         <div ref={endRef} />
       </div>
-      <div className="p-3 border-t s-bd flex items-center gap-2"><input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} placeholder="Повідомлення…" className="flex-1 px-3 py-2.5 rounded-xl s-input text-sm" /><button onClick={send} className="w-10 h-10 rounded-xl bg-violet-500 text-white flex items-center justify-center hover:bg-violet-600"><Send size={16} /></button></div>
+      {canSend ? (<div className="p-3 border-t s-bd flex items-center gap-2"><input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} placeholder={"Кому: " + labelOf(ch)} className="flex-1 px-3 py-2.5 rounded-xl s-input text-sm" /><button onClick={send} className="w-10 h-10 rounded-xl bg-violet-500 text-white flex items-center justify-center hover:bg-violet-600"><Send size={16} /></button></div>) : (<div className="p-3 border-t s-bd f12 s-muted text-center">Перегляд усієї історії (лише керуючий). Оберіть канал, щоб написати.</div>)}
     </div>
   </div>);
 }
@@ -740,6 +770,39 @@ function ReportModal({ onClose, deptName, month, year, employees, stats, compute
   </div></Overlay>);
 }
 function MiniStat({ label, value, red }) { return (<div className="rounded-xl s-th px-3 py-3 text-center"><div className="f11 s-muted">{label}</div><div className="text-lg font-bold" style={{ color: red ? "#ef4444" : "var(--text)" }}>{value}</div></div>); }
+
+function NotesModal({ notes, reminders, onSaveNotes, onSaveReminders, onClose }) {
+  const [nt, setNt] = useState("");
+  const [rt, setRt] = useState(""); const [rd, setRd] = useState("");
+  const addNote = () => { const t = nt.trim(); if (!t) return; onSaveNotes([{ id: uid(), text: t, ts: Date.now() }, ...notes]); setNt(""); };
+  const delNote = (id) => onSaveNotes(notes.filter((x) => x.id !== id));
+  const addRem = () => { const t = rt.trim(); if (!t || !rd) return; onSaveReminders([...reminders, { id: uid(), text: t, date: rd, done: false }].sort((a, b) => (a.date > b.date ? 1 : -1))); setRt(""); setRd(""); };
+  const toggleRem = (id) => onSaveReminders(reminders.map((x) => x.id === id ? { ...x, done: !x.done } : x));
+  const delRem = (id) => onSaveReminders(reminders.filter((x) => x.id !== id));
+  return (<Overlay onClose={onClose}><div className="s-elev rounded-2xl s-shadow overflow-hidden flex flex-col" style={{ width: 460, maxWidth: "94vw", maxHeight: "88vh" }}>
+    <div className="px-5 py-4 border-b s-bd flex items-center justify-between"><div className="flex items-center gap-2 font-semibold"><StickyNote size={18} className="text-amber-500" /> Нотатки і нагадування</div><button onClick={onClose} className="p-1.5 rounded-lg s-hover s-muted"><X size={18} /></button></div>
+    <div className="p-5 overflow-y-auto space-y-5">
+      <div>
+        <div className="text-xs s-soft font-semibold mb-2 flex items-center gap-1.5"><Bell size={14} /> Нагадування (сповіщення при вході)</div>
+        <div className="flex flex-wrap items-end gap-2 mb-2"><input value={rt} onChange={(e) => setRt(e.target.value)} placeholder="Текст нагадування" className="flex-1 px-3 py-2 rounded-lg s-input text-sm" style={{ minWidth: 140 }} /><input type="date" value={rd} onChange={(e) => setRd(e.target.value)} className="px-2 py-2 rounded-lg s-input text-sm" /><button onClick={addRem} className="px-3 py-2 rounded-lg s-grad text-sm">Додати</button></div>
+        <div className="space-y-1.5">{reminders.length === 0 && <div className="f12 s-muted">Немає нагадувань.</div>}{reminders.map((r) => (<div key={r.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg s-th"><button onClick={() => toggleRem(r.id)} className="w-5 h-5 rounded border flex items-center justify-center shrink-0" style={{ borderColor: r.done ? "#10b981" : "var(--border)", background: r.done ? "#10b981" : "transparent", color: "#fff" }}>{r.done ? <Check size={13} /> : null}</button><div className="flex-1 min-w-0"><div className={"text-sm truncate" + (r.done ? " line-through" : "")}>{r.text}</div><div className="f11 s-muted">{r.date}</div></div><button onClick={() => delRem(r.id)} className="s-muted hover:text-red-500"><X size={14} /></button></div>))}</div>
+      </div>
+      <div className="pt-3 border-t s-bd">
+        <div className="text-xs s-soft font-semibold mb-2 flex items-center gap-1.5"><StickyNote size={14} /> Нотатки</div>
+        <div className="flex items-center gap-2 mb-2"><input value={nt} onChange={(e) => setNt(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addNote()} placeholder="Нова нотатка" className="flex-1 px-3 py-2 rounded-lg s-input text-sm" /><button onClick={addNote} className="px-3 py-2 rounded-lg s-grad text-sm">Додати</button></div>
+        <div className="space-y-1.5">{notes.length === 0 && <div className="f12 s-muted">Нотаток немає.</div>}{notes.map((n) => (<div key={n.id} className="flex items-start gap-2 px-2 py-1.5 rounded-lg s-th"><div className="flex-1 min-w-0 text-sm">{n.text}<div className="f11 s-muted">{new Date(n.ts).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</div></div><button onClick={() => delNote(n.id)} className="s-muted hover:text-red-500"><X size={14} /></button></div>))}</div>
+      </div>
+    </div>
+  </div></Overlay>);
+}
+
+function ReminderAlert({ list, onClose }) {
+  return (<Overlay onClose={onClose}><div className="s-elev rounded-2xl s-shadow overflow-hidden" style={{ width: 400, maxWidth: "94vw" }}>
+    <div className="px-6 pt-6 pb-3 text-center"><div className="text-3xl">⏰</div><div className="mt-1 text-lg font-bold">Нагадування на сьогодні</div></div>
+    <div className="px-4 pb-2 space-y-2 overflow-y-auto" style={{ maxHeight: "60vh" }}>{list.map((r) => (<div key={r.id} className="flex items-center gap-3 px-3 py-2 rounded-xl s-th"><Bell size={16} className="text-amber-500 shrink-0" /><div className="flex-1 min-w-0"><div className="text-sm font-medium">{r.text}</div><div className="f11 s-muted">{r.date}</div></div></div>))}</div>
+    <div className="px-4 pb-4 pt-2"><button onClick={onClose} className="w-full py-2.5 rounded-lg s-grad font-medium">Зрозуміло</button></div>
+  </div></Overlay>);
+}
 
 function BirthdayAlert({ list, onClose }) {
   return (<Overlay onClose={onClose}><div className="s-elev rounded-2xl s-shadow overflow-hidden" style={{ width: 420, maxWidth: "94vw" }}>
