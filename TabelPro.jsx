@@ -744,9 +744,9 @@ function MiniStat({ label, value, red }) { return (<div className="rounded-xl s-
 function BirthdayAlert({ list, onClose }) {
   return (<Overlay onClose={onClose}><div className="s-elev rounded-2xl s-shadow overflow-hidden" style={{ width: 420, maxWidth: "94vw" }}>
     <div className="px-6 pt-6 pb-4 text-center" style={{ background: "linear-gradient(135deg, rgba(236,72,153,.20), rgba(20,184,166,.20))" }}>
-      <div className="text-4xl">\ud83c\udf82</div>
+      <div className="text-4xl">🎂</div>
       <div className="mt-2 text-lg font-bold">Сьогодні день народження!</div>
-      <div className="f12 s-soft">Привітайте колег \ud83c\udf89</div>
+      <div className="f12 s-soft">Привітайте колег 🎉</div>
     </div>
     <div className="p-4 space-y-2 max-h-72 overflow-y-auto">
       {list.map((b, i) => { const c = b.gender === "f" ? "#ec4899" : b.gender === "m" ? "#14b8a6" : "#f59e0b"; return (
