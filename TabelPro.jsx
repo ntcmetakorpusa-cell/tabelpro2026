@@ -147,6 +147,7 @@ export default function TabelPro() {
   const [editDept, setEditDept] = useState(null);
   const [navOpen, setNavOpen] = useState(false);
   const [birthdayAlert, setBirthdayAlert] = useState(null);
+  const monthRef = useRef(null);
   const [addDeptOpen, setAddDeptOpen] = useState(false);
   const [newDeptName, setNewDeptName] = useState("");
   const [clock, setClock] = useState(new Date());
@@ -204,6 +205,7 @@ export default function TabelPro() {
   const flash = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2200); };
   const scanBirthdays = async (depts) => { const t = new Date(); const out = []; for (const d of depts) { const emps = await loadKey("tp_emp_" + d.id, [], true); for (const e of emps) if (isBirthdayToday(e, t)) out.push({ name: e.name, dept: d.name, gender: e.gender || "", age: birthdayAge(e, t) }); } return out; };
   useEffect(() => { if (!booted || !session) return; (async () => { const t = new Date(); const todayStr = isoDay(t.getFullYear(), t.getMonth(), t.getDate()); const already = await loadKey("tp_bday_shown", "", false); if (already === todayStr) return; const list = await scanBirthdays(departments); await saveKey("tp_bday_shown", todayStr, false); if (list.length) setBirthdayAlert(list); })(); }, [booted, session]);
+  useEffect(() => { if (monthRef.current) monthRef.current.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" }); }, [month]);
   const toggleTheme = async () => { const t = theme === "dark" ? "light" : "dark"; setTheme(t); await saveKey("tp_theme", t, false); };
 
   async function startSession(sess) { setSession(sess); setDeptId(sess.role === "dept" ? sess.deptId : departments[0]?.id); await saveKey("tp_session", sess, false); }
@@ -366,7 +368,7 @@ export default function TabelPro() {
         <header className="h-14 s-panel s-shadow border-b s-bd flex items-center gap-2 sm:gap-3 px-2 sm:px-4 relative z-10"><button onClick={() => setNavOpen(true)} className="md:hidden p-2 rounded-lg s-hover s-soft" title="Меню"><Menu size={18} /></button>
           <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg s-card border s-bd text-sm font-mono"><Clock size={14} className="s-muted" /> {pad(clock.getDate())}.{pad(clock.getMonth() + 1)} · {pad(clock.getHours())}:{pad(clock.getMinutes())}</div>
           <div className="flex items-center gap-2 font-semibold min-w-0"><Building2 size={16} className="text-indigo-500 shrink-0" /> <span className="truncate">{deptName}</span></div>
-          <div className="flex items-center gap-1 ml-2">
+          <div className="hidden sm:flex items-center gap-1 ml-2">
             <button onClick={() => setYear((y) => y - 1)} className="p-1.5 rounded-lg s-hover s-soft"><ChevronLeft size={16} /></button>
             <span className="px-2 font-semibold tabular-nums">{year}</span>
             <button onClick={() => setYear((y) => y + 1)} className="p-1.5 rounded-lg s-hover s-soft"><ChevronRight size={16} /></button>
@@ -378,8 +380,9 @@ export default function TabelPro() {
           </div>
         </header>
 
-        <div className="s-panel border-b s-bd px-4 overflow-x-auto">
-          <div className="flex gap-1 py-2">{MONTHS.map((m, i) => (<button key={m} onClick={() => setMonth(i)} className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition ${i === month ? "s-grad font-semibold" : "s-soft s-hover"}`}>{m}</button>))}</div>
+        <div className="sm:hidden px-3 py-2 s-panel border-b s-bd flex items-center justify-between"><span className="text-sm font-semibold text-indigo-500">{MONTHS[month]} {year}</span><div className="flex items-center gap-1"><button onClick={() => setYear((y) => y - 1)} className="p-1.5 rounded-lg s-hover s-soft"><ChevronLeft size={16} /></button><button onClick={() => setYear((y) => y + 1)} className="p-1.5 rounded-lg s-hover s-soft"><ChevronRight size={16} /></button></div></div>
+        <div className="s-panel border-b s-bd px-2 sm:px-4 overflow-x-auto">
+          <div className="flex gap-1 py-2">{MONTHS.map((m, i) => (<button key={m} ref={i === month ? monthRef : null} onClick={() => setMonth(i)} className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition ${i === month ? "s-grad font-semibold" : "s-soft s-hover"}`}>{m}</button>))}</div>
         </div>
 
         <div className="flex-1 overflow-auto p-3 sm:p-4 space-y-4">
@@ -408,17 +411,17 @@ export default function TabelPro() {
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs s-soft">{Object.entries(STATUSES).map(([k, s]) => (<span key={k} className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: s.dot }} /> {s.label}</span>))}</div>
 
           <div className="s-card s-shadow rounded-2xl border s-bd overflow-hidden">
-            <div className="overflow-x-auto">
+            <div className="overflow-auto" style={{ maxHeight: "65vh" }}>
               <table className="border-collapse text-sm">
                 <thead>
                   <tr className="s-th border-b s-bd">
-                    <th className="sticky left-0 z-20 s-th text-left px-4 py-3 font-semibold s-soft border-r s-bd" style={{ minWidth: 200 }}>ПРАЦІВНИК</th>
+                    <th className="sticky left-0 top-0 z-30 s-th text-left px-4 py-3 font-semibold s-soft border-r s-bd" style={{ minWidth: 200 }}>ПРАЦІВНИК</th>
                     {dayList.map((d) => {
                       const wd = new Date(year, month, d).getDay(); const weekend = wd === 0 || wd === 6;
                       const today = year === now.getFullYear() && month === now.getMonth() && d === now.getDate();
-                      return (<th key={d} className={`px-1 py-2 text-center ${weekend ? "s-weekend" : ""}`} style={{ minWidth: 58, background: today ? "var(--today)" : undefined }}><div className={`font-bold ${today ? "text-indigo-500" : ""}`}>{d}</div><div className="f10" style={{ color: weekend ? "#f87171" : "var(--muted)" }}>{WD[wd]}</div></th>);
+                      return (<th key={d} className={`sticky top-0 z-20 px-1 py-2 text-center s-th ${weekend ? "s-weekend" : ""}`} style={{ minWidth: 58, background: today ? "var(--today)" : undefined }}><div className={`font-bold ${today ? "text-indigo-500" : ""}`}>{d}</div><div className="f10" style={{ color: weekend ? "#f87171" : "var(--muted)" }}>{WD[wd]}</div></th>);
                     })}
-                    <th className="px-3 py-2 text-center s-th border-l s-bd font-semibold s-soft" style={{ minWidth: 120 }}>ПІДСУМОК</th>
+                    <th className="sticky top-0 z-20 px-3 py-2 text-center s-th border-l s-bd font-semibold s-soft" style={{ minWidth: 120 }}>ПІДСУМОК</th>
                   </tr>
                 </thead>
                 <tbody>
