@@ -142,6 +142,7 @@ export default function TabelPro() {
   const [showHistory, setShowHistory] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [showAccess, setShowAccess] = useState(false);
+  const [editDept, setEditDept] = useState(null);
   const [addDeptOpen, setAddDeptOpen] = useState(false);
   const [newDeptName, setNewDeptName] = useState("");
   const [clock, setClock] = useState(new Date());
@@ -247,7 +248,10 @@ export default function TabelPro() {
   }, [employees, computeEmp, year, month]);
 
   /* ---- дії ---- */
-  const addEmployee = async () => { const name = newName.trim(); if (!name) return; await persistEmployees([...employees, { id: uid(), name, start: "08:00", end: "17:00", phone: "", birthday: "", position: "", leaves: [] }]); setNewName(""); pushLog(`${session.label}: додано «${name}»`); flash("Співробітника додано"); };
+  const addEmployee = async () => { const name = newName.trim(); if (!name) return; const _dep = departments.find((x) => x.id === deptId); await persistEmployees([...employees, { id: uid(), name, start: _dep?.start || "08:00", end: _dep?.end || "17:00", phone: "", birthday: "", position: "", leaves: [] }]); setNewName(""); pushLog(`${session.label}: додано «${name}»`); flash("Співробітника додано"); };
+  const renameDept = async (id, name) => { const nm = name.trim(); if (!nm) return; const list = departments.map((x) => (x.id === id ? { ...x, name: nm } : x)); await persistDepartments(list); setEditDept((p) => (p && p.id === id ? { ...p, name: nm } : p)); pushLog(`Перейменовано відділ → «${nm}»`); };
+  const setDeptShift = async (id, start, end) => { const list = departments.map((x) => (x.id === id ? { ...x, start, end } : x)); await persistDepartments(list); setEditDept((p) => (p && p.id === id ? { ...p, start, end } : p)); };
+  const applyShiftAll = async (start, end) => { await persistEmployees(employees.map((e) => ({ ...e, start, end }))); flash("Графік застосовано до всіх"); };
   const removeEmployee = async (id) => { const e = employees.find((x) => x.id === id); await persistEmployees(employees.filter((x) => x.id !== id)); pushLog(`${session.label}: видалено «${e?.name || ""}»`); setProfile(null); };
   const saveProfile = async (data) => { await persistEmployees(employees.map((e) => (e.id === data.id ? data : e))); pushLog(`${session.label}: оновлено картку «${data.name}»`); setProfile(null); flash("Дані збережено"); };
   const saveCell = async (empId, day, rec) => {
@@ -328,7 +332,7 @@ export default function TabelPro() {
               <button onClick={() => { if (canSwitch) { setDeptId(d.id); setSearch(""); } }} className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left transition ${d.id === deptId ? "s-grad s-glow" : "s-soft s-hover"} ${!canSwitch ? "cursor-default" : ""}`}>
                 <span className="w-1.5 h-1.5 rounded-full" style={{ background: d.id === deptId ? "#fff" : "var(--muted)" }} />{d.name}
               </button>
-              {isAdmin && departments.length > 1 && (<button onClick={() => removeDepartment(d.id)} className="opacity-0 group-hover:opacity-100 p-1 s-muted hover:text-red-500" title="Видалити відділ"><Trash2 size={14} /></button>)}
+              {isAdmin && (<button onClick={() => { setDeptId(d.id); setEditDept(d); }} className="opacity-0 group-hover:opacity-100 p-1 s-muted hover:text-indigo-500" title="Налаштування відділу"><Pencil size={14} /></button>)}{isAdmin && departments.length > 1 && (<button onClick={() => removeDepartment(d.id)} className="opacity-0 group-hover:opacity-100 p-1 s-muted hover:text-red-500" title="Видалити відділ"><Trash2 size={14} /></button>)}
             </div>
           ))}
           {isAdmin && (addDeptOpen ? (
@@ -383,14 +387,14 @@ export default function TabelPro() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <div className="relative flex-1" style={{ minWidth: 220 }}>
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 s-muted" />
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Пошук співробітника…" className="w-full pl-9 pr-9 py-2.5 rounded-xl s-input text-sm" />
-              {search && <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 s-muted hover:text-red-500"><X size={16} /></button>}
-            </div>
             <div className="flex items-center gap-2">
-              <input value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addEmployee()} placeholder="ПІБ нового працівника…" className="px-3 py-2.5 rounded-xl s-input text-sm w-56" />
+              <input value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addEmployee()} placeholder="ПІБ нового працівника…" className="px-3 py-2.5 rounded-xl s-input text-sm w-64" />
               <button onClick={addEmployee} className="flex items-center gap-2 px-4 py-2.5 rounded-xl s-grad text-sm font-medium s-glow"><Plus size={16} /> Додати</button>
+            </div>
+            <div className="relative ml-auto" style={{ width: 250, maxWidth: "100%" }}>
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 s-muted" />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Пошук…" className="w-full pl-9 pr-9 py-2.5 rounded-xl s-input text-sm" />
+              {search && <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 s-muted hover:text-red-500"><X size={16} /></button>}
             </div>
           </div>
 
@@ -452,6 +456,7 @@ export default function TabelPro() {
         const lv = manual ? null : leaveOn(emp, isoDay(year, month, editing.day));
         return (<DayEditor info={editing} value={manual || (lv ? { status: lv } : undefined)} autoLeave={!!lv} onClose={() => setEditing(null)} onSave={(rec) => saveCell(editing.empId, editing.day, rec)} dateLabel={`${editing.day} ${MONTHS[month]} ${year}`} />);
       })()}
+      {editDept && <DepartmentEditor dept={departments.find((x) => x.id === editDept.id) || editDept} employees={employees} onClose={() => setEditDept(null)} onRename={renameDept} onSetShift={setDeptShift} onApplyAll={applyShiftAll} onOpenProfile={(e) => setProfile(e)} onAddName={async (n) => { const nm = (n || "").trim(); if (!nm) return; const _dep = departments.find((x) => x.id === deptId); await persistEmployees([...employees, { id: uid(), name: nm, start: _dep?.start || "08:00", end: _dep?.end || "17:00", phone: "", birthday: "", position: "", leaves: [] }]); flash("Співробітника додано"); }} onDeleteEmp={(id) => removeEmployee(id)} />}
       {profile && <ProfileEditor emp={profile} onClose={() => setProfile(null)} onSave={saveProfile} onDelete={() => removeEmployee(profile.id)} />}
       {showChat && <ChatPanel chat={chat} departments={departments} currentDeptId={isManager ? session.deptId : deptId} onSend={sendMessage} onClose={() => setShowChat(false)} />}
       {showHistory && <HistoryModal log={log} onClose={() => setShowHistory(false)} />}
@@ -594,6 +599,41 @@ function DayEditor({ info, value, autoLeave, onClose, onSave, dateLabel }) {
       <label className="block"><span className="text-xs s-soft">Примітка</span><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="напр. деталі дня…" className="mt-1 w-full px-3 py-2 rounded-lg s-input text-sm" /></label>
     </div>
     <div className="px-5 py-4 s-th flex items-center gap-2"><button onClick={() => onSave({ in: tin, out: tout, status, note })} className="flex-1 py-2.5 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700">Зберегти</button><button onClick={() => onSave(null)} className="px-4 py-2.5 rounded-lg border s-bd s-soft s-hover">Очистити</button></div>
+  </div></Overlay>);
+}
+
+function DepartmentEditor({ dept, employees, onClose, onRename, onSetShift, onApplyAll, onOpenProfile, onAddName, onDeleteEmp }) {
+  const [name, setName] = useState(dept.name);
+  const initMatch = SHIFTS.find((s) => s.start === (dept.start || "") && s.end === (dept.end || ""));
+  const [mode, setMode] = useState(initMatch ? initMatch.id : (dept.start ? "manual" : "s1"));
+  const [st, setSt] = useState(dept.start || "08:00");
+  const [en, setEn] = useState(dept.end || "17:00");
+  const [nn, setNn] = useState("");
+  const pickPreset = (s) => { setMode(s.id); setSt(s.start); setEn(s.end); };
+  const saveAll = () => { if (name.trim() && name.trim() !== dept.name) onRename(dept.id, name); onSetShift(dept.id, st, en); onClose(); };
+  return (<Overlay onClose={onClose}><div className="s-elev rounded-2xl s-shadow overflow-hidden flex flex-col" style={{ width: 460, maxWidth: "94vw", maxHeight: "88vh" }}>
+    <div className="px-5 py-4 border-b s-bd flex items-center justify-between"><div className="flex items-center gap-2 font-semibold"><Building2 size={18} className="text-indigo-500" /> Налаштування відділу</div><button onClick={onClose} className="p-1.5 rounded-lg s-hover s-muted"><X size={18} /></button></div>
+    <div className="p-5 overflow-y-auto space-y-4">
+      <label className="block"><span className="text-xs s-soft">Назва відділу</span><input value={name} onChange={(e) => setName(e.target.value)} className="mt-1 w-full px-3 py-2 rounded-lg s-input text-sm" /></label>
+      <div>
+        <span className="text-xs s-soft flex items-center gap-1.5"><Clock size={14} /> Графік відділу за замовчуванням</span>
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {SHIFTS.map((s) => (<button key={s.id} onClick={() => pickPreset(s)} className="px-3 py-1.5 rounded-lg text-xs font-medium border transition" style={{ background: mode === s.id ? "#6366f1" : "transparent", color: mode === s.id ? "#fff" : "var(--soft)", borderColor: mode === s.id ? "#6366f1" : "var(--border)" }}>{s.label}</button>))}
+          <button onClick={() => setMode("manual")} className="px-3 py-1.5 rounded-lg text-xs font-medium border transition" style={{ background: mode === "manual" ? "#6366f1" : "transparent", color: mode === "manual" ? "#fff" : "var(--soft)", borderColor: mode === "manual" ? "#6366f1" : "var(--border)" }}>Вручну</button>
+        </div>
+        {mode === "manual" && (<div className="mt-2 grid grid-cols-2 gap-3"><label className="block"><span className="text-xs s-soft">Початок</span><input type="time" value={st} onChange={(e) => setSt(e.target.value)} className="mt-1 w-full px-3 py-2 rounded-lg s-input text-sm" /></label><label className="block"><span className="text-xs s-soft">Кінець</span><input type="time" value={en} onChange={(e) => setEn(e.target.value)} className="mt-1 w-full px-3 py-2 rounded-lg s-input text-sm" /></label></div>)}
+        <button onClick={() => onApplyAll(st, en)} className="mt-2 f12 text-indigo-500 hover:underline">Застосувати графік {st}–{en} до всіх співробітників</button>
+      </div>
+      <div className="pt-2 border-t s-bd">
+        <span className="text-xs s-soft flex items-center gap-1.5"><Users size={14} /> Співробітники ({employees.length})</span>
+        <div className="mt-2 space-y-1.5 max-h-56 overflow-y-auto">
+          {employees.map((e) => (<div key={e.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg s-th"><div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">{e.name}</div><div className="f11 s-muted">{e.start}–{e.end}{e.position ? " · " + e.position : ""}</div></div><button onClick={() => onOpenProfile(e)} className="text-xs px-2 py-1 rounded-lg border s-bd s-soft s-hover">Картка</button><button onClick={() => onDeleteEmp(e.id)} className="p-1.5 rounded-lg s-muted hover:text-red-500"><Trash2 size={13} /></button></div>))}
+          {employees.length === 0 && <div className="f12 s-muted">Поки немає співробітників.</div>}
+        </div>
+        <div className="mt-2 flex items-center gap-2"><input value={nn} onChange={(e) => setNn(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { onAddName(nn); setNn(""); } }} placeholder="ПІБ нового співробітника" className="flex-1 px-3 py-2 rounded-lg s-input text-sm" /><button onClick={() => { onAddName(nn); setNn(""); }} className="px-3 py-2 rounded-lg s-grad text-sm">Додати</button></div>
+      </div>
+    </div>
+    <div className="px-5 py-4 s-th flex items-center gap-2"><button onClick={saveAll} className="flex-1 py-2.5 rounded-lg s-grad font-medium">Зберегти</button></div>
   </div></Overlay>);
 }
 
