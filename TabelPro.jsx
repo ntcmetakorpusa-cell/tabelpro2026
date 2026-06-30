@@ -5,7 +5,7 @@ import {
   Search, Plus, History, MessageSquare, Download, FileSpreadsheet,
   ChevronLeft, ChevronRight, X, Phone, Cake, Briefcase, Trash2,
   Pencil, Send, LogOut, Building2, Check, Clock, KeyRound, Lock,
-  ShieldCheck, RotateCcw, Eye, EyeOff, Sun, Moon, Plane
+  ShieldCheck, RotateCcw, Eye, EyeOff, Sun, Moon, Plane, Menu
 } from "lucide-react";
 
 /* ============================================================
@@ -143,6 +143,7 @@ export default function TabelPro() {
   const [showReport, setShowReport] = useState(false);
   const [showAccess, setShowAccess] = useState(false);
   const [editDept, setEditDept] = useState(null);
+  const [navOpen, setNavOpen] = useState(false);
   const [addDeptOpen, setAddDeptOpen] = useState(false);
   const [newDeptName, setNewDeptName] = useState("");
   const [clock, setClock] = useState(new Date());
@@ -320,7 +321,8 @@ export default function TabelPro() {
       <style>{THEME_CSS}</style>
 
       {/* SIDEBAR */}
-      <aside className="w-60 shrink-0 s-panel border-r s-bd flex flex-col">
+      {navOpen && <div className="fixed inset-0 z-30 md:hidden" style={{ background: "rgba(0,0,0,.45)" }} onClick={() => setNavOpen(false)} />}
+      <aside className={`s-panel border-r s-bd flex flex-col fixed inset-y-0 left-0 z-40 w-64 transform transition-transform duration-200 ${navOpen ? "translate-x-0" : "-translate-x-full"} md:static md:translate-x-0 md:w-60 md:shrink-0`}>
         <div className="px-5 py-4 border-b s-bd flex items-center gap-2">
           <div className="w-8 h-8 rounded-xl s-grad s-glow flex items-center justify-center text-white"><CalendarDays size={18} /></div>
           <div className="font-semibold tracking-tight">Табель <span className="text-indigo-500">PRO</span></div>
@@ -329,10 +331,10 @@ export default function TabelPro() {
         <nav className="flex-1 overflow-y-auto px-2 space-y-1">
           {visibleDepts.map((d) => (
             <div key={d.id} className="group flex items-center">
-              <button onClick={() => { if (canSwitch) { setDeptId(d.id); setSearch(""); } }} className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left transition ${d.id === deptId ? "s-grad s-glow" : "s-soft s-hover"} ${!canSwitch ? "cursor-default" : ""}`}>
+              <button onClick={() => { if (canSwitch) { setDeptId(d.id); setSearch(""); setNavOpen(false); } }} className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left transition ${d.id === deptId ? "s-grad s-glow" : "s-soft s-hover"} ${!canSwitch ? "cursor-default" : ""}`}>
                 <span className="w-1.5 h-1.5 rounded-full" style={{ background: d.id === deptId ? "#fff" : "var(--muted)" }} />{d.name}
               </button>
-              {isAdmin && (<button onClick={() => { setDeptId(d.id); setEditDept(d); }} className="opacity-0 group-hover:opacity-100 p-1 s-muted hover:text-indigo-500" title="Налаштування відділу"><Pencil size={14} /></button>)}{isAdmin && departments.length > 1 && (<button onClick={() => removeDepartment(d.id)} className="opacity-0 group-hover:opacity-100 p-1 s-muted hover:text-red-500" title="Видалити відділ"><Trash2 size={14} /></button>)}
+              {isAdmin && (<button onClick={() => { setDeptId(d.id); setEditDept(d); setNavOpen(false); }} className="opacity-0 group-hover:opacity-100 p-1 s-muted hover:text-indigo-500" title="Налаштування відділу"><Pencil size={14} /></button>)}{isAdmin && departments.length > 1 && (<button onClick={() => removeDepartment(d.id)} className="opacity-0 group-hover:opacity-100 p-1 s-muted hover:text-red-500" title="Видалити відділ"><Trash2 size={14} /></button>)}
             </div>
           ))}
           {isAdmin && (addDeptOpen ? (
@@ -356,18 +358,18 @@ export default function TabelPro() {
 
       {/* MAIN */}
       <main className="flex-1 min-w-0 flex flex-col">
-        <header className="h-14 s-panel s-shadow border-b s-bd flex items-center gap-3 px-4 relative z-10">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg s-card border s-bd text-sm font-mono"><Clock size={14} className="s-muted" /> {pad(clock.getDate())}.{pad(clock.getMonth() + 1)} · {pad(clock.getHours())}:{pad(clock.getMinutes())}</div>
-          <div className="flex items-center gap-2 font-semibold"><Building2 size={16} className="text-indigo-500" /> {deptName}</div>
+        <header className="h-14 s-panel s-shadow border-b s-bd flex items-center gap-2 sm:gap-3 px-2 sm:px-4 relative z-10"><button onClick={() => setNavOpen(true)} className="md:hidden p-2 rounded-lg s-hover s-soft" title="Меню"><Menu size={18} /></button>
+          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg s-card border s-bd text-sm font-mono"><Clock size={14} className="s-muted" /> {pad(clock.getDate())}.{pad(clock.getMonth() + 1)} · {pad(clock.getHours())}:{pad(clock.getMinutes())}</div>
+          <div className="flex items-center gap-2 font-semibold min-w-0"><Building2 size={16} className="text-indigo-500 shrink-0" /> <span className="truncate">{deptName}</span></div>
           <div className="flex items-center gap-1 ml-2">
             <button onClick={() => setYear((y) => y - 1)} className="p-1.5 rounded-lg s-hover s-soft"><ChevronLeft size={16} /></button>
             <span className="px-2 font-semibold tabular-nums">{year}</span>
             <button onClick={() => setYear((y) => y + 1)} className="p-1.5 rounded-lg s-hover s-soft"><ChevronRight size={16} /></button>
           </div>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-1 sm:gap-2">
             <button onClick={toggleTheme} className="p-2 rounded-lg s-hover s-soft" title="Перемкнути тему">{theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}</button>
-            <button onClick={() => setShowChat(true)} className="relative flex items-center gap-2 px-3 py-1.5 rounded-lg bg-violet-500 text-white hover:bg-violet-600 text-sm font-medium"><MessageSquare size={16} /> Чат {chat.length > 0 && <span className="f10 bg-white text-violet-600 rounded-full px-1.5 py-0.5">{chat.length}</span>}</button>
-            <button onClick={exportExcel} className="flex items-center gap-2 px-3 py-1.5 rounded-lg s-grad text-sm font-medium"><Download size={16} /> Звіт</button>
+            <button onClick={() => setShowChat(true)} className="relative flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg bg-violet-500 text-white hover:bg-violet-600 text-sm font-medium"><MessageSquare size={16} /><span className="hidden sm:inline">Чат</span>{chat.length > 0 && <span className="f10 bg-white text-violet-600 rounded-full px-1.5 py-0.5">{chat.length}</span>}</button>
+            <button onClick={exportExcel} className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg s-grad text-sm font-medium"><Download size={16} /><span className="hidden sm:inline">Звіт</span></button>
           </div>
         </header>
 
@@ -375,7 +377,7 @@ export default function TabelPro() {
           <div className="flex gap-1 py-2">{MONTHS.map((m, i) => (<button key={m} onClick={() => setMonth(i)} className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition ${i === month ? "s-grad font-semibold" : "s-soft s-hover"}`}>{m}</button>))}</div>
         </div>
 
-        <div className="flex-1 overflow-auto p-4 space-y-4">
+        <div className="flex-1 overflow-auto p-3 sm:p-4 space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3">
             <StatCard icon={<Users size={16} />} label="Працівників" value={employees.length} color="#6366f1" />
             <StatCard icon={<CalendarDays size={16} />} label="Роб. днів" value={stats.wDays} color="#64748b" />
@@ -463,7 +465,7 @@ export default function TabelPro() {
       {showReport && <ReportModal onClose={() => setShowReport(false)} deptName={deptName} month={MONTHS[month]} year={year} employees={employees} stats={stats} compute={computeEmp} onExport={exportExcel} />}
       {showAccess && <AccessPanel onClose={() => setShowAccess(false)} departments={departments} users={users} onSetPin={setRolePin} onClearPin={clearRolePin} />}
 
-      {toast && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm shadow-lg" style={{ background: "#0f172a" }}><Check size={16} className="text-emerald-400" /> {toast}</div>}
+      {toast && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm shadow-lg" style={{ background: "#0f172a", zIndex: 70 }}><Check size={16} className="text-emerald-400" /> {toast}</div>}
     </div>
   );
 }
@@ -562,7 +564,7 @@ function AccessRow({ row, hasPin, onSet, onClear }) {
    КОМПОНЕНТИ
 ============================================================ */
 function StatCard({ icon, label, value, color }) {
-  return (<div className="s-card s-shadow s-lift rounded-2xl border s-bd px-3 py-3 flex items-center gap-3"><div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ color, background: color + "22" }}>{icon}</div><div className="min-w-0"><div className="f11 s-muted truncate">{label}</div><div className="text-lg font-bold leading-tight tabular-nums">{value}</div></div></div>);
+  return (<div className="s-card s-shadow s-lift rounded-2xl border s-bd px-3 py-3 flex items-center gap-3"><div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ color, background: color + "22" }}>{icon}</div><div className="min-w-0"><div className="f11 s-muted leading-tight">{label}</div><div className="text-lg font-bold leading-tight tabular-nums">{value}</div></div></div>);
 }
 
 function DayCell({ rec, onClick }) {
@@ -693,7 +695,7 @@ function ChatPanel({ chat, departments, currentDeptId, onSend, onClose }) {
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chat, filter]);
   const list = filter === "all" ? chat : chat.filter((m) => m.deptId === filter);
   const send = () => { onSend(text); setText(""); };
-  return (<div className="fixed inset-0 z-40 flex justify-end"><div className="absolute inset-0" style={{ background: "var(--overlay)" }} onClick={onClose} />
+  return (<div className="fixed inset-0 flex justify-end" style={{ zIndex: 60 }}><div className="absolute inset-0" style={{ background: "var(--overlay)" }} onClick={onClose} />
     <div className="relative h-full flex flex-col shadow-2xl s-panel" style={{ width: 420, maxWidth: "100%" }}>
       <div className="px-5 py-4 border-b s-bd flex items-center justify-between"><div className="flex items-center gap-2 font-semibold"><MessageSquare size={18} className="text-violet-500" /> Чат відділів</div><button onClick={onClose} className="p-1.5 rounded-lg s-hover s-muted"><X size={18} /></button></div>
       <div className="px-4 py-2 border-b s-bd flex gap-1 overflow-x-auto"><button onClick={() => setFilter("all")} className={`px-3 py-1 rounded-full text-xs whitespace-nowrap ${filter === "all" ? "bg-violet-500 text-white" : "s-th s-soft"}`}>Усі</button>{departments.map((d) => <button key={d.id} onClick={() => setFilter(d.id)} className={`px-3 py-1 rounded-full text-xs whitespace-nowrap ${filter === d.id ? "bg-violet-500 text-white" : "s-th s-soft"}`}>{d.name}</button>)}</div>
@@ -729,4 +731,4 @@ function ReportModal({ onClose, deptName, month, year, employees, stats, compute
 }
 function MiniStat({ label, value, red }) { return (<div className="rounded-xl s-th px-3 py-3 text-center"><div className="f11 s-muted">{label}</div><div className="text-lg font-bold" style={{ color: red ? "#ef4444" : "var(--text)" }}>{value}</div></div>); }
 
-function Overlay({ children, onClose }) { return (<div className="fixed inset-0 z-40 flex items-center justify-center p-4"><div className="absolute inset-0" style={{ background: "var(--overlay)" }} onClick={onClose} /><div className="relative">{children}</div></div>); }
+function Overlay({ children, onClose }) { return (<div className="fixed inset-0 flex items-center justify-center p-4" style={{ zIndex: 60 }}><div className="absolute inset-0" style={{ background: "var(--overlay)" }} onClick={onClose} /><div className="relative">{children}</div></div>); }
