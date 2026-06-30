@@ -38,6 +38,8 @@ const SHIFTS = [
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 const pad = (n) => String(n).padStart(2, "0");
 const isoDay = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}`;
+function isBirthdayToday(emp, t) { if (!emp || !emp.birthday) return false; const p = String(emp.birthday).split("-"); if (p.length < 3) return false; return Number(p[1]) === t.getMonth() + 1 && Number(p[2]) === t.getDate(); }
+function birthdayAge(emp, t) { const y = Number(String(emp.birthday || "").split("-")[0]); return y ? t.getFullYear() - y : null; }
 
 /* ---------- тема (CSS-змінні) ---------- */
 const THEME_CSS = `
@@ -144,6 +146,7 @@ export default function TabelPro() {
   const [showAccess, setShowAccess] = useState(false);
   const [editDept, setEditDept] = useState(null);
   const [navOpen, setNavOpen] = useState(false);
+  const [birthdayAlert, setBirthdayAlert] = useState(null);
   const [addDeptOpen, setAddDeptOpen] = useState(false);
   const [newDeptName, setNewDeptName] = useState("");
   const [clock, setClock] = useState(new Date());
@@ -199,6 +202,8 @@ export default function TabelPro() {
   const persistUsers = useCallback(async (u) => { setUsers(u); await saveKey("tp_users", u, true); }, []);
   const pushLog = useCallback((text) => { setLog((prev) => { const next = [{ id: uid(), text, ts: Date.now() }, ...prev].slice(0, 200); saveKey("tp_log", next, true); return next; }); }, []);
   const flash = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2200); };
+  const scanBirthdays = async (depts) => { const t = new Date(); const out = []; for (const d of depts) { const emps = await loadKey("tp_emp_" + d.id, [], true); for (const e of emps) if (isBirthdayToday(e, t)) out.push({ name: e.name, dept: d.name, gender: e.gender || "", age: birthdayAge(e, t) }); } return out; };
+  useEffect(() => { if (!booted || !session) return; (async () => { const t = new Date(); const todayStr = isoDay(t.getFullYear(), t.getMonth(), t.getDate()); const already = await loadKey("tp_bday_shown", "", false); if (already === todayStr) return; const list = await scanBirthdays(departments); await saveKey("tp_bday_shown", todayStr, false); if (list.length) setBirthdayAlert(list); })(); }, [booted, session]);
   const toggleTheme = async () => { const t = theme === "dark" ? "light" : "dark"; setTheme(t); await saveKey("tp_theme", t, false); };
 
   async function startSession(sess) { setSession(sess); setDeptId(sess.role === "dept" ? sess.deptId : departments[0]?.id); await saveKey("tp_session", sess, false); }
@@ -419,13 +424,13 @@ export default function TabelPro() {
                 <tbody>
                   {visibleEmployees.length === 0 && (<tr><td colSpan={dN + 2} className="px-4 py-12 text-center s-muted">{employees.length === 0 ? "Ще немає співробітників. Додайте першого вище." : "Нічого не знайдено."}</td></tr>)}
                   {visibleEmployees.map((emp) => {
-                    const rec = attendance[emp.id] || {}; const c = computeEmp(emp);
+                    const rec = attendance[emp.id] || {}; const c = computeEmp(emp); const bday = isBirthdayToday(emp, now); const bcol = emp.gender === "f" ? { bg: "rgba(236,72,153,.16)", text: "#be185d" } : emp.gender === "m" ? { bg: "rgba(20,184,166,.18)", text: "#0f766e" } : { bg: "rgba(245,158,11,.18)", text: "#b45309" };
                     return (
                       <tr key={emp.id} className="border-b s-bd s-rowhover">
-                        <td className="sticky left-0 z-10 s-card px-4 py-2 border-r s-bd align-top">
+                        <td className="sticky left-0 z-10 s-card px-4 py-2 border-r s-bd align-top" style={bday ? { background: bcol.bg } : undefined}>
                           <button onClick={() => setProfile(emp)} className="text-left group">
                             <div className="font-medium group-hover:text-indigo-500 flex items-center gap-1.5">{emp.name} <Pencil size={12} className="opacity-0 group-hover:opacity-100 s-muted" /></div>
-                            <div className="f11 s-muted">{emp.start}–{emp.end}{emp.position ? ` · ${emp.position}` : ""}</div>
+                            <div className="f11 s-muted">{emp.start}–{emp.end}{emp.position ? ` · ${emp.position}` : ""}</div>{bday && <div className="f11 font-semibold flex items-center gap-1 mt-0.5" style={{ color: bcol.text }}><Cake size={12} /> З Днем народження!</div>}
                           </button>
                         </td>
                         {dayList.map((d) => {
@@ -464,6 +469,7 @@ export default function TabelPro() {
       {showHistory && <HistoryModal log={log} onClose={() => setShowHistory(false)} />}
       {showReport && <ReportModal onClose={() => setShowReport(false)} deptName={deptName} month={MONTHS[month]} year={year} employees={employees} stats={stats} compute={computeEmp} onExport={exportExcel} />}
       {showAccess && <AccessPanel onClose={() => setShowAccess(false)} departments={departments} users={users} onSetPin={setRolePin} onClearPin={clearRolePin} />}
+      {birthdayAlert && <BirthdayAlert list={birthdayAlert} onClose={() => setBirthdayAlert(null)} />}
 
       {toast && <div className="fixed bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2.5 rounded-xl text-white text-sm shadow-lg" style={{ background: "#0f172a", zIndex: 70 }}><Check size={16} className="text-emerald-400" /> {toast}</div>}
     </div>
@@ -656,6 +662,7 @@ function ProfileEditor({ emp, onClose, onSave, onDelete }) {
       <Field label="Посада" icon={<Briefcase size={14} />}><input value={d.position || ""} onChange={(e) => upd("position", e.target.value)} placeholder="напр. Менеджер" className="mt-1 w-full px-3 py-2 rounded-lg s-input text-sm" /></Field>
       <Field label="Телефон" icon={<Phone size={14} />}><input value={d.phone || ""} onChange={(e) => upd("phone", e.target.value)} placeholder="+380…" className="mt-1 w-full px-3 py-2 rounded-lg s-input text-sm" /></Field>
       <Field label="Дата народження" icon={<Cake size={14} />}><input type="date" value={d.birthday || ""} onChange={(e) => upd("birthday", e.target.value)} className="mt-1 w-full px-3 py-2 rounded-lg s-input text-sm" /></Field>
+          <Field label="Стать"><div className="mt-1 flex gap-1.5">{[["f", "Жінка"], ["m", "Чоловік"], ["", "Не вказано"]].map(([v, l]) => { const g = (d.gender || ""); const gc = v === "f" ? "#ec4899" : v === "m" ? "#14b8a6" : "#6366f1"; return (<button key={l} onClick={() => upd("gender", v)} className="px-3 py-1.5 rounded-lg text-xs font-medium border transition" style={{ background: g === v ? gc : "transparent", color: g === v ? "#fff" : "var(--soft)", borderColor: g === v ? gc : "var(--border)" }}>{l}</button>); })}</div></Field>
       <div>
         <span className="text-xs s-soft flex items-center gap-1.5"><Clock size={14} /> Графік роботи</span>
         <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -730,5 +737,23 @@ function ReportModal({ onClose, deptName, month, year, employees, stats, compute
   </div></Overlay>);
 }
 function MiniStat({ label, value, red }) { return (<div className="rounded-xl s-th px-3 py-3 text-center"><div className="f11 s-muted">{label}</div><div className="text-lg font-bold" style={{ color: red ? "#ef4444" : "var(--text)" }}>{value}</div></div>); }
+
+function BirthdayAlert({ list, onClose }) {
+  return (<Overlay onClose={onClose}><div className="s-elev rounded-2xl s-shadow overflow-hidden" style={{ width: 420, maxWidth: "94vw" }}>
+    <div className="px-6 pt-6 pb-4 text-center" style={{ background: "linear-gradient(135deg, rgba(236,72,153,.20), rgba(20,184,166,.20))" }}>
+      <div className="text-4xl">\ud83c\udf82</div>
+      <div className="mt-2 text-lg font-bold">Сьогодні день народження!</div>
+      <div className="f12 s-soft">Привітайте колег \ud83c\udf89</div>
+    </div>
+    <div className="p-4 space-y-2 max-h-72 overflow-y-auto">
+      {list.map((b, i) => { const c = b.gender === "f" ? "#ec4899" : b.gender === "m" ? "#14b8a6" : "#f59e0b"; return (
+        <div key={i} className="flex items-center gap-3 px-3 py-2 rounded-xl s-th">
+          <div className="w-9 h-9 rounded-full flex items-center justify-center text-white shrink-0" style={{ background: c }}><Cake size={16} /></div>
+          <div className="flex-1 min-w-0"><div className="font-semibold truncate">{b.name}{b.age ? `, ${b.age}` : ""}</div><div className="f11 s-muted">{b.dept}</div></div>
+        </div>); })}
+    </div>
+    <div className="px-4 pb-4"><button onClick={onClose} className="w-full py-2.5 rounded-lg s-grad font-medium">Чудово!</button></div>
+  </div></Overlay>);
+}
 
 function Overlay({ children, onClose }) { return (<div className="fixed inset-0 flex items-center justify-center p-4" style={{ zIndex: 60 }}><div className="absolute inset-0" style={{ background: "var(--overlay)" }} onClick={onClose} /><div className="relative">{children}</div></div>); }
