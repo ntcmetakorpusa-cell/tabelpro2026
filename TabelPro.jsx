@@ -90,7 +90,8 @@ function hashPin(pin) {
 
 /* ---------- час ---------- */
 function parseMin(t) { if (!t || typeof t !== "string") return null; const [h, m] = t.split(":").map(Number); if (Number.isNaN(h) || Number.isNaN(m)) return null; return h * 60 + m; }
-function dayHours(rec) { if (!rec) return 0; const a = parseMin(rec.in), b = parseMin(rec.out); if (a == null || b == null || b <= a) return 0; return (b - a) / 60; }
+const LUNCH_MIN = 60;
+function dayHours(rec) { if (!rec) return 0; const a = parseMin(rec.in), b = parseMin(rec.out); if (a == null || b == null || b <= a) return 0; let mins = b - a; if (mins >= 360) mins -= LUNCH_MIN; return mins / 60; }
 const daysInMonth = (y, m) => new Date(y, m + 1, 0).getDate();
 function workingDays(y, m) { let n = 0; const d = daysInMonth(y, m); for (let i = 1; i <= d; i++) { const wd = new Date(y, m, i).getDay(); if (wd !== 0 && wd !== 6) n++; } return n; }
 const fmt = (n) => { const r = Math.round(n * 10) / 10; return Number.isInteger(r) ? String(r) : r.toFixed(1); };
