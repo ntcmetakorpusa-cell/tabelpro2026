@@ -18,6 +18,7 @@ import {
 const MONTHS = ["Січень","Лютий","Березень","Квітень","Травень","Червень","Липень","Серпень","Вересень","Жовтень","Листопад","Грудень"];
 const MONTHS_SHORT = ["Січ","Лют","Бер","Кві","Тра","Чер","Лип","Сер","Вер","Жов","Лис","Гру"];
 const WD = ["НД","ПН","ВТ","СР","ЧТ","ПТ","СБ"];
+const HR_DEPT = { id: "hr", name: "Відділ кадрів", start: "08:00", end: "17:00" };
 
 const STATUSES = {
   present:  { label: "Вчасно",      dot: "#16a34a", bg: "#dcfce7", text: "#166534" },
@@ -231,8 +232,8 @@ export default function TabelPro() {
   async function handleCreateAdmin(pin) { const next = { ...users, admin: { pin: hashPin(pin) } }; await persistUsers(next); await startSession({ role: "admin", deptId: null, label: "Керуючий" }); }
   async function logout() { setSession(null); await saveKey("tp_session", null, false); }
 
-  const deptName = useMemo(() => departments.find((d) => d.id === deptId)?.name || "", [departments, deptId]);
-  const visibleDepts = canSwitch ? departments : departments.filter((d) => d.id === session?.deptId);
+  const deptName = useMemo(() => (deptId === "hr" ? HR_DEPT.name : departments.find((d) => d.id === deptId)?.name || ""), [departments, deptId]);
+  const visibleDepts = canSwitch ? [...departments, HR_DEPT] : departments.filter((d) => d.id === session?.deptId);
   const visibleEmployees = useMemo(() => { const q = search.trim().toLowerCase(); return q ? employees.filter((e) => e.name.toLowerCase().includes(q)) : employees; }, [employees, search]);
 
   /* ---- розрахунок з урахуванням лікарняних/відпусток ---- */
@@ -269,6 +270,7 @@ export default function TabelPro() {
   const addEmployee = async () => { const name = newName.trim(); if (!name) return; const _dep = departments.find((x) => x.id === deptId); await persistEmployees([...employees, { id: uid(), name, start: _dep?.start || "08:00", end: _dep?.end || "17:00", phone: "", birthday: "", position: "", leaves: [] }]); setNewName(""); pushLog(`${session.label}: додано «${name}»`); flash("Співробітника додано"); };
   const renameDept = async (id, name) => { const nm = name.trim(); if (!nm) return; const list = departments.map((x) => (x.id === id ? { ...x, name: nm } : x)); await persistDepartments(list); setEditDept((p) => (p && p.id === id ? { ...p, name: nm } : p)); pushLog(`Перейменовано відділ → «${nm}»`); };
   const setDeptShift = async (id, start, end) => { const list = departments.map((x) => (x.id === id ? { ...x, start, end } : x)); await persistDepartments(list); setEditDept((p) => (p && p.id === id ? { ...p, start, end } : p)); };
+  const saveDeptMeta = async (id, name, start, end) => { const nm = (name || "").trim(); const list = departments.map((x) => (x.id === id ? { ...x, name: nm || x.name, start, end } : x)); await persistDepartments(list); setEditDept((p) => (p && p.id === id ? { ...p, name: nm || p.name, start, end } : p)); if (nm) pushLog(`Оновлено відділ «${nm}»`); flash("Відділ збережено"); };
   const applyShiftAll = async (start, end) => { await persistEmployees(employees.map((e) => ({ ...e, start, end }))); flash("Графік застосовано до всіх"); };
   const removeEmployee = async (id) => { const e = employees.find((x) => x.id === id); await persistEmployees(employees.filter((x) => x.id !== id)); pushLog(`${session.label}: видалено «${e?.name || ""}»`); setProfile(null); };
   const saveProfile = async (data) => { await persistEmployees(employees.map((e) => (e.id === data.id ? data : e))); pushLog(`${session.label}: оновлено картку «${data.name}»`); setProfile(null); flash("Дані збережено"); };
@@ -351,7 +353,7 @@ export default function TabelPro() {
               <button onClick={() => { if (canSwitch) { setDeptId(d.id); setSearch(""); setNavOpen(false); } }} className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left transition ${d.id === deptId ? "s-grad s-glow" : "s-soft s-hover"} ${!canSwitch ? "cursor-default" : ""}`}>
                 <span className="w-1.5 h-1.5 rounded-full" style={{ background: d.id === deptId ? "#fff" : "var(--muted)" }} />{d.name}
               </button>
-              {isAdmin && (<button onClick={() => { setDeptId(d.id); setEditDept(d); setNavOpen(false); }} className="opacity-0 group-hover:opacity-100 p-1 s-muted hover:text-indigo-500" title="Налаштування відділу"><Pencil size={14} /></button>)}{isAdmin && departments.length > 1 && (<button onClick={() => removeDepartment(d.id)} className="opacity-0 group-hover:opacity-100 p-1 s-muted hover:text-red-500" title="Видалити відділ"><Trash2 size={14} /></button>)}
+              {isAdmin && d.id !== "hr" && (<button onClick={() => { setDeptId(d.id); setEditDept(d); setNavOpen(false); }} className="opacity-0 group-hover:opacity-100 p-1 s-muted hover:text-indigo-500" title="Налаштування відділу"><Pencil size={14} /></button>)}{isAdmin && d.id !== "hr" && departments.length > 1 && (<button onClick={() => removeDepartment(d.id)} className="opacity-0 group-hover:opacity-100 p-1 s-muted hover:text-red-500" title="Видалити відділ"><Trash2 size={14} /></button>)}
             </div>
           ))}
           {isAdmin && (addDeptOpen ? (
@@ -477,7 +479,7 @@ export default function TabelPro() {
         const lv = manual ? null : leaveOn(emp, isoDay(year, month, editing.day));
         return (<DayEditor info={editing} value={manual || (lv ? { status: lv } : undefined)} autoLeave={!!lv} onClose={() => setEditing(null)} onSave={(rec) => saveCell(editing.empId, editing.day, rec)} dateLabel={`${editing.day} ${MONTHS[month]} ${year}`} />);
       })()}
-      {editDept && <DepartmentEditor dept={departments.find((x) => x.id === editDept.id) || editDept} employees={employees} onClose={() => setEditDept(null)} onRename={renameDept} onSetShift={setDeptShift} onApplyAll={applyShiftAll} onOpenProfile={(e) => setProfile(e)} onAddName={async (n) => { const nm = (n || "").trim(); if (!nm) return; const _dep = departments.find((x) => x.id === deptId); await persistEmployees([...employees, { id: uid(), name: nm, start: _dep?.start || "08:00", end: _dep?.end || "17:00", phone: "", birthday: "", position: "", leaves: [] }]); flash("Співробітника додано"); }} onDeleteEmp={(id) => removeEmployee(id)} />}
+      {editDept && <DepartmentEditor dept={departments.find((x) => x.id === editDept.id) || editDept} employees={employees} onClose={() => setEditDept(null)} onRename={renameDept} onSetShift={setDeptShift} onSave={saveDeptMeta} onApplyAll={applyShiftAll} onOpenProfile={(e) => setProfile(e)} onAddName={async (n) => { const nm = (n || "").trim(); if (!nm) return; const _dep = departments.find((x) => x.id === deptId); await persistEmployees([...employees, { id: uid(), name: nm, start: _dep?.start || "08:00", end: _dep?.end || "17:00", phone: "", birthday: "", position: "", leaves: [] }]); flash("Співробітника додано"); }} onDeleteEmp={(id) => removeEmployee(id)} />}
       {profile && <ProfileEditor emp={profile} onClose={() => setProfile(null)} onSave={saveProfile} onDelete={() => removeEmployee(profile.id)} />}
       {showChat && <ChatPanel chat={chat} departments={departments} myKey={myKey} myLabel={session.label} isAdmin={isAdmin} onSend={sendMessage} onClose={() => setShowChat(false)} />}
       {showHistory && <HistoryModal log={log} onClose={() => setShowHistory(false)} />}
@@ -626,7 +628,7 @@ function DayEditor({ info, value, autoLeave, onClose, onSave, dateLabel }) {
   </div></Overlay>);
 }
 
-function DepartmentEditor({ dept, employees, onClose, onRename, onSetShift, onApplyAll, onOpenProfile, onAddName, onDeleteEmp }) {
+function DepartmentEditor({ dept, employees, onClose, onRename, onSetShift, onSave, onApplyAll, onOpenProfile, onAddName, onDeleteEmp }) {
   const [name, setName] = useState(dept.name);
   const initMatch = SHIFTS.find((s) => s.start === (dept.start || "") && s.end === (dept.end || ""));
   const [mode, setMode] = useState(initMatch ? initMatch.id : (dept.start ? "manual" : "s1"));
@@ -634,7 +636,7 @@ function DepartmentEditor({ dept, employees, onClose, onRename, onSetShift, onAp
   const [en, setEn] = useState(dept.end || "17:00");
   const [nn, setNn] = useState("");
   const pickPreset = (s) => { setMode(s.id); setSt(s.start); setEn(s.end); };
-  const saveAll = () => { if (name.trim() && name.trim() !== dept.name) onRename(dept.id, name); onSetShift(dept.id, st, en); onClose(); };
+  const saveAll = () => { onSave(dept.id, name, st, en); onClose(); };
   return (<Overlay onClose={onClose}><div className="s-elev rounded-2xl s-shadow overflow-hidden flex flex-col" style={{ width: 460, maxWidth: "94vw", maxHeight: "88vh" }}>
     <div className="px-5 py-4 border-b s-bd flex items-center justify-between"><div className="flex items-center gap-2 font-semibold"><Building2 size={18} className="text-indigo-500" /> Налаштування відділу</div><button onClick={onClose} className="p-1.5 rounded-lg s-hover s-muted"><X size={18} /></button></div>
     <div className="p-5 overflow-y-auto space-y-4">
